@@ -22,15 +22,14 @@ Make a labeled histogram (with 30 bins) of the ages of the houses in the data se
 
 
 ```{r Q1}
-# type your code for Question 1 here, and Knit
+ames_train %>% summarise(n_distinct(Year.Built)) #102 distinct values
+# Create a histogram with 30 bins of Year.Built
+ggplot(data = ames_train, aes(Year.Built)) + geom_histogram(binwidth = (102/30))
 
 ```
 
-
 * * *
-
-NOTE: Write your written response to Question 1 here.  Delete this note before you submit your work.
-
+The data appear to be left skewed, and multi-modal.
 
 * * *
 
@@ -40,15 +39,20 @@ The mantra in real estate is "Location, Location, Location!" Make a graphical di
 
 
 ```{r Q2}
-# type your code for Question 2 here, and Knit
-
+ggplot(data = ames_train, aes(Neighborhood, price)) + geom_boxplot() + coord_flip()
+summary_stats <- 
+  ames_train %>% 
+  filter(!is.na(price)) %>%
+  group_by(Neighborhood) %>% 
+  summarise(min = min(price), max = max(price), mean = mean(price), median = median(price), sd = sd(price))
 ```
 
 
 * * *
 
-NOTE: Write your written response to Question 2 here.  Delete this note before you submit your work.
-
+The Oldtown Neighborhood had the lowest priced home, at \$12,789, and the fourth lowest mean (\$120,225) and median (\$120,000) values for all houses in the area.
+The highest priced home was in Northridge Heights, at \$615,000. This Northridge heights had the second highest mean and median values, as well.
+The neighborhood with the most price diversity was Stonebridge, with a standard deviation of \$123,459. Stonebridge has the highest mean and median home prices, as well.
 
 
 * * *
@@ -58,14 +62,14 @@ NOTE: Write your written response to Question 2 here.  Delete this note before y
 Which variable has the largest number of missing values? Explain why it makes sense that there are so many missing values for this variable.
 
 ```{r Q3}
-# type your code for Question 3 here, and Knit
+sapply(ames_train, function(x) sum(is.na(x)))
 
 ```
 
 
 * * *
 
-NOTE: Write your written response to Question 3 here.  Delete this note before you submit your work.
+Pool.QC seems to have the most missing data (997 cases), which makes sense, as this value would only be filled if the property has a pool.
 
 
 * * *
@@ -76,13 +80,31 @@ We want to predict the natural log of the home prices. Candidate explanatory var
 
 
 ```{r Q4}
-# type your code for Question 4 here, and Knit
+# Need to natural log Lot.Area to make the relationship more linear
+ggplot(data = ames_train, aes(log(Lot.Area), log(price))) + geom_point() 
 
+# Need to deal with skew in year.built...
+# Need to deal with
+ggplot(data = ames_train, aes(Bedroom.AbvGr, log(price))) + geom_point() 
+
+       
+model_base <- lm(data = ames_train, log(price) ~ log(Lot.Area) + Land.Slope + Year.Built + Year.Remod.Add + Bedroom.AbvGr)
+
+
+model2 <- model2 <- lm(data = ames_train, log(price) ~ log(Lot.Area) + Year.Built + Year.Remod.Add + Bedroom.AbvGr)
+model3 <- model2 <- lm(data = ames_train, log(price) ~ log(Lot.Area) + Land.Slope + Year.Remod.Add + Bedroom.AbvGr)
+model4 <- model2 <- lm(data = ames_train, log(price) ~ log(Lot.Area) + Land.Slope + Year.Built + Bedroom.AbvGr)
+model5 <- model2 <- lm(data = ames_train, log(price) ~ log(Lot.Area) + Land.Slope + Year.Built + Year.Remod.Add)
+model6 <- lm(data = ames_train, log(price) ~ Land.Slope + Year.Built + Year.Remod.Add + Bedroom.AbvGr)
+model_results <- data.frame(c("model_base", "model2", "model3", "model4", "model5", "model6"), c(summary(model_base)$adj.r.squared, summary(model2)$adj.r.squared, summary(model3)$adj.r.squared, summary(model4)$adj.r.squared, summary(model5)$adj.r.squared, summary(model6)$adj.r.squared))
+names(model_results) <- c("model", "adj.r.squared")
+model_results
+summary(model_base)
 ```
 
 * * *
 
-NOTE: Write your written response to Question 4 here.  Delete this note before you submit your work.
+We'll use a backwards step-wise selection approach to selecting a multiple linear regression. It finds that all variables are significant, and contribute to a higher adjusted R^2 value.
 
 
 * * *
