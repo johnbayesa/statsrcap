@@ -1,0 +1,27 @@
+---
+title: "Assignment1"
+author: "John Anderson"
+date: "March 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+load("ames_train.Rdata")
+library(dplyr)
+```
+
+## Data review
+First, we remove missing data from the dataset. There are this many missing values:
+```{r missing, echo=FALSE}
+ames_train %>% filter(complete.cases(ames_train)) %>% summarise(n())
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r, echo=FALSE}
+
+```
+
