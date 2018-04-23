@@ -98,7 +98,7 @@ summary(model_base)
 
 * * *
 
-We use a backwards step-wise selection approach using adjusted r^2 values to select a multiple linear regression. The base model, which includes all variables, It shows that all variables are significant, and contribute to a higher adjusted R^2 value. The second step, where variables are individually removed from the regression equation, shows no increase in adjusted r^2, indicating that the base model is the best model for predicting the natural log of home prices.
+We use a backwards step-wise selection approach using adjusted r^2 values to select a multiple linear regression. The base model, which includes all variables, It shows that all variables are significant, and contribute to a higher adjusted R^2 value. The second step, where variables are individually removed from the regression equation, shows no increase in adjusted r^2, indicating that the base model is the best model for predicting the natural log of home prices, with an adjusted r^2 value of 0.5598 (p = 0.0000).
 
 
 * * *
@@ -112,8 +112,7 @@ Which home has the largest squared residual in the previous analysis (Question 4
 comparison <- data.frame(model_base$fitted.values, ames_train$price)
 comparison <- comparison %>% mutate(sq.residual = model_base.fitted.values - log(ames_train.price))
 comparison %>% filter(sq.residual == max(sq.residual))
-ames_train %>% filter(price == 12789)
-plot(model_base$residuals)
+#ames_train %>% filter(price == 12789)
 ```
 
 * * *
@@ -147,6 +146,7 @@ summary(model_base)
 * * *
 
 When we re-select the model using the same methods, but this time using the natural log of lot area, the best fit model is still the base model (including all candidate variables).
+
 #
 
 Do you think it is better to log transform Lot.Area, in terms of assumptions for linear regression? Make graphs of the predicted values of log home price versus the true values of log home price for the regression models selected for Lot.Area and log(Lot.Area). Referencing these two plots, provide a written support that includes a quantitative justification for your answer in the first part of question 7.
@@ -154,17 +154,13 @@ Do you think it is better to log transform Lot.Area, in terms of assumptions for
 ```{r Q7}
 model_base <- lm(data = ames_train, log(price) ~ Lot.Area + Land.Slope + Year.Built + Year.Remod.Add + Bedroom.AbvGr)
 model_base_log <- lm(data = ames_train, log(price) ~ log(Lot.Area) + Land.Slope + Year.Built + Year.Remod.Add + Bedroom.AbvGr)
-plot(log(ames_train$price), col = "black", type = "line")
-plot(model_base$residuals, col = "green")
-points(model_base_log$residuals, col = "blue")
-
-
-
+ggplot(ames_train, aes(predict(model_base), log(price))) + geom_point()
+ggplot(ames_train, aes(predict(model_base_log), log(price))) + geom_point()
 ```
 
 * * *
+Graphs of the predicted natural logs of home prices from the models against the actual home prices suggest that the model that uses the natural log of Lot.Area instead of Lot.Area is a better factor to include in the model. The graph of the relationship between the predicted and actual values for the model that uses the natural log of Lot.Area appears to be more linear than the non-logged version.. 
 
-NOTE: Write your written response to Question 7 here.  Delete this note before you submit your work.
 
 
 * * *
