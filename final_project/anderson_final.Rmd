@@ -25,6 +25,8 @@ Use the code block below to load any necessary packages
 library(statsr)
 library(dplyr)
 library(BAS)
+library(ggplot2)
+library(scales)
 ```
 
 ## Part 1 - Exploratory Data Analysis (EDA)
@@ -37,10 +39,81 @@ After you have explored completely, submit the three graphs/plots that you found
 
 * * *
 
-NOTE: Write your written response to part 1 here. Delete this note before you submit your work.
+Understand all possible data:
 
-```{r creategraphs}
+```{r all_data, echo=FALSE}
+
+names(ames_train)
+
 ```
+
+
+There are some incomplete cases. The following table shows values where data are missing.
+
+```{r creategraphs, echo=FALSE}
+missing <- sapply(ames_train, function(x) sum(is.na(x)))
+missing[missing>0]
+```
+
+All fields missing data are "optional" fields, in that if a property does not contain a feature, the field will not be filled. For example, there are 21 properties that do not have basements. Once we deal with filtering the data, we will apply non-null values to the non-continuous values in order for them to be properly represented in the model.
+
+One field of interest is the sale condition. We only want to model the price for properties that were sold under normal conditions, as abnormal sales conditions are difficult to predict and may be unique circumstances that lead to a difference in the final purchase price. The following table shows the number of records by sale condition. We see that there are 166 records that sold for non-normal circumstances. These will be removed from the training data, leaving us with 834 records. The Sale.Condition field will then be dropped from the dataset.
+
+```{r sale_condition, echo=FALSE}
+ames_train %>% group_by(Sale.Condition) %>% summarise(records = n())
+ames_train <- ames_train %>% filter(Sale.Condition == "Normal")
+ames_train <- ames_train[!names(ames_train) == "Sale.Condition"]
+```
+
+There are some really big lots:
+
+```{r lot.area}
+ggplot(data = ames_train, aes(Lot.Area)) + 
+  geom_histogram(binwidth = 100) +
+  scale_x_continuous(label = comma)
+```
+
+Home square footage is right skewed and multi-modal.
+
+```{r home_area}
+ggplot(data = ames_train, aes(area)) + 
+  geom_histogram() +
+  scale_x_continuous(label = comma)
+```
+
+
+Those big lots really stand out when comparing Lot.Area to area:
+
+```{r}
+ggplot(data = ames_train, aes(area, Lot.Area)) + 
+  geom_point() + 
+  scale_y_continuous(labels = comma) + 
+  scale_x_continuous(labels = comma)
+```
+
+Price:
+
+```{r price_hist, echo=FALSE}
+ggplot(data = ames_train, aes(price)) + geom_histogram() + scale_x_continuous(labels = dollar)
+```
+
+
+Subclasses:
+We need to replace the subclass integer values as a factor. Most of the subclasses are 
+
+```{r subclasses}
+ames_train$MS.SubClass <- as.character(ames_train$MS.SubClass) # change to character data type
+ames_train$MS.SubClass[nchar(ames_train$MS.SubClass)==2] <- paste0("0",ames_train$MS.SubClass[nchar(ames_train$MS.SubClass)==2])
+ggplot(data = ames_train, aes(MS.SubClass)) + geom_bar()
+```
+
+Year Sold:
+Do we need to adjust for inflation? Probably not. There is some difference in buying power between 2006 and 2010, which spanned the years of the great recession. 
+
+```{r}
+ggplot(data = ames_train, aes(Yr.Sold)) + geom_bar()
+```
+
 
 * * *
 
