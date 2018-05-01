@@ -1,0 +1,33 @@
+Your assignment will be graded based on a successful demonstration of understanding model selection, evaluation, refinement and validation.
+
+We recommend that you use the prior quiz results as hints for your analysis. You may refer back to the previous four courses for relevant concepts. If you have any questions about the project, feel free to ask on the forum to discuss with your peers.
+
+When evaluating your peers' assignments, please grade based on the author's content and understanding of relevant statistical concepts. Please don’t penalize grades based on English grammar - remember that a lot of learners are not native English speakers.
+
+Overall outline of the assignment:
+
+Using the tools and techniques you learned in the specialization, you will build a model to predict housing prices in Ames, and explain how you decided on this model. The assignment consists of five parts:
+
+1. Exploratory data analysis (20 points): must include three correctly labeled graphs and an explanation.
+
+2. Development and assessment of an initial model, following a semi-guided process of analysis (10 points)
+
+Initial model: must include a summary table and an explanation/discussion for variable selection
+Model selection: must include a discussion
+Residual: must include a residual plot and a discussion
+RMSE: must include an RMSE and an explanation
+Model testing: must include an explanation
+3. Development of the final model (20 points)
+
+Final model: must include a summary table
+Variable: must include an explanation
+Variable interaction: must include an explanation
+Variable selection: must use appropriate method and include an explanation
+4. Assessment of the final model (25 points)
+
+Residual: must include a residual plot and a discussion
+RMSE: must include an RMSE and an explanation
+Model evaluation: must include an evaluation discussion
+Model validation: must include a discussion
+Model result: must include undervalued and overvalued houses
+5. Conclusion (10 points): must include a summary of results and a discussion of things learned
