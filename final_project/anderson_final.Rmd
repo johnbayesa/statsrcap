@@ -27,6 +27,7 @@ library(dplyr)
 library(BAS)
 library(ggplot2)
 library(scales)
+library(GGally)
 ```
 
 ## Part 1 - Exploratory Data Analysis (EDA)
@@ -113,6 +114,21 @@ Do we need to adjust for inflation? Probably not. There is some difference in bu
 ```{r}
 ggplot(data = ames_train, aes(Yr.Sold)) + geom_bar()
 ```
+
+Let's just make a bunch of correlation tables and do a bunch of anovas to see what looks significant.
+
+```{r}
+ggplot(data = ames_train, aes(Overall.Qual, price)) + geom_jitter()
+
+ggplot(data = ames_train, aes(area, price)) + geom_point()
+
+ggplot(data = ames_train, aes(Neighborhood, price)) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Bedroom.AbvGr, price)) + geom_jitter()
+
+```
+
+
 
 
 * * *
