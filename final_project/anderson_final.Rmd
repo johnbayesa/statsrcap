@@ -70,9 +70,37 @@ There are some really big lots:
 
 ```{r lot.area}
 ggplot(data = ames_train, aes(Lot.Area)) + 
-  geom_histogram(binwidth = 100) +
+  geom_histogram(binwidth = 1000) +
+  scale_x_continuous(label = comma)
+
+# Are lot size and home size colinear? Yes, significantly, but the fit isn't great.
+ggplot(data = ames_train, aes(log(Lot.Area), log(area))) + 
+  geom_point() +
+  scale_x_continuous(label = comma)
+
+summary(lm(log(area)~log(Lot.Area), data = ames_train))
+
+```
+
+When we look at price compared to large lots, the non-normal trend indicates we may need to log the variable.
+
+```{r lot.area.x.price}
+ggplot(data = ames_train, aes(Lot.Area, price)) + 
+  geom_point() +
+  scale_x_continuous(label = comma)
+
+
+# Starting to make more sense and look more useful,
+ggplot(data = ames_train, aes(log(Lot.Area), price)) + 
+  geom_point() +
+  scale_x_continuous(label = comma)
+
+# One more transforamtion makes things look much more useful.
+ggplot(data = ames_train, aes(log(Lot.Area), log(price))) + 
+  geom_point() +
   scale_x_continuous(label = comma)
 ```
+
 
 Home square footage is right skewed and multi-modal.
 
@@ -82,20 +110,33 @@ ggplot(data = ames_train, aes(area)) +
   scale_x_continuous(label = comma)
 ```
 
+As with lot.area, home square footage can benefit from a log transformation:
 
-Those big lots really stand out when comparing Lot.Area to area:
+```{r sqfootage.x.price}
+# Without transforming at all, area looks relatively usefully linear related to price.
+ggplot(data = ames_train, aes(area, price)) + 
+  geom_point() +
+  scale_x_continuous(label = comma)
 
-```{r}
-ggplot(data = ames_train, aes(area, Lot.Area)) + 
-  geom_point() + 
-  scale_y_continuous(labels = comma) + 
-  scale_x_continuous(labels = comma)
+
+# This actually makes the relationship look less linear.
+ggplot(data = ames_train, aes(log(area), price)) + 
+  geom_point() +
+  scale_x_continuous(label = comma)
+
+# One more transforamtion makes things look much more useful.
+ggplot(data = ames_train, aes(log(area), log(price))) + 
+  geom_point() +
+  scale_x_continuous(label = comma)
 ```
 
-Price:
+
+Price is right skewed, as you might expect with a continuous variable bound by $0 on the low and structurally unbound on the high. Logging the data gives us a nearly normal distribution around a median of \$159,467.
 
 ```{r price_hist, echo=FALSE}
 ggplot(data = ames_train, aes(price)) + geom_histogram() + scale_x_continuous(labels = dollar)
+ggplot(data = ames_train, aes(log(price))) + geom_histogram() + scale_x_continuous(labels = dollar)
+ames_train %>% summarise(median(price))
 ```
 
 
@@ -105,7 +146,6 @@ We need to replace the subclass integer values as a factor. Most of the subclass
 ```{r subclasses}
 ames_train$MS.SubClass <- as.character(ames_train$MS.SubClass) # change to character data type
 ames_train$MS.SubClass[nchar(ames_train$MS.SubClass)==2] <- paste0("0",ames_train$MS.SubClass[nchar(ames_train$MS.SubClass)==2])
-ggplot(data = ames_train, aes(MS.SubClass)) + geom_bar()
 ```
 
 Year Sold:
@@ -115,16 +155,84 @@ Do we need to adjust for inflation? Probably not. There is some difference in bu
 ggplot(data = ames_train, aes(Yr.Sold)) + geom_bar()
 ```
 
+```{r variable.transforms}
+# Change alley characteristics to include whether there's an alley at all.
+ames_train$Alley_vals <- as.character(ames_train$Alley)
+ames_train$Alley_vals[is.na(ames_train$Alley_vals)] <- "No alley"
+
+ames_train$basement_dummy <- TRUE
+ames_train$basement_dummy[is.na(ames_train$Bsmt.Qual) | ames_train$Bsmt.Qual == ""] <- FALSE
+
+ames_train$garage_dummy <- TRUE
+ames_train$garage_dummy[is.na(ames_train$Garage.Type)] <- FALSE
+
+ames_train$deck_dummy <- FALSE
+ames_train$deck_dummy[ames_train$Wood.Deck.SF>0] <- TRUE
+
+ames_train$porch_dummy <- FALSE
+ames_train$porch_dummy[ames_train$Open.Porch.SF>0] <- TRUE
+ames_train$porch_dummy[ames_train$Enclosed.Porch>0] <- TRUE
+ames_train$porch_dummy[ames_train$X3Ssn.Porch>0] <- TRUE
+ames_train$porch_dummy[ames_train$Screen.Porch>0] <- TRUE
+
+ames_train$pool_dummy <- FALSE
+ames_train$pool_dummy[ames_train$Pool.Area>0] <- TRUE
+
+ames_train$fence_dummy <- TRUE
+ames_train$fence_dummy[is.na(ames_train$Fence)] <- FALSE
+
+drops <- c("Bsmt.Qual", "Bsmt.Cond", "Bsmt.Exposure", "BsmtFin.Type.1", "Bsmt.Fin.Type.2", "Bsmt.SF.1", "Bsmt.SF.2", "Bsmt.Unf.SF", 
+           "Total.Bsmt.SF", "Bsmt.Full.Bath", "Bsmt.Half.Bath", "Garage.Type", "Garage.Yr.Blt", "Garage.Finish", "Garage.Cars", 
+           "Garage.Area", "Garage.Qual", "Garage.Cond", "Wood.Deck.SF", "Open.Porch.SF", "Enclosed.Porch", "X3Ssn.Porch",
+           "Screen.Porch", "Pool.Area", "Fence")
+
+ames_train %>% group_by(Fence) %>% summarise(n())
+```
+
+
 Let's just make a bunch of correlation tables and do a bunch of anovas to see what looks significant.
 
 ```{r}
-ggplot(data = ames_train, aes(Overall.Qual, price)) + geom_jitter()
 
-ggplot(data = ames_train, aes(area, price)) + geom_point()
 
-ggplot(data = ames_train, aes(Neighborhood, price)) + geom_boxplot() + coord_flip()
+ggplot(data = ames_train, aes(Overall.Qual, log(price))) + geom_jitter()
 
-ggplot(data = ames_train, aes(Bedroom.AbvGr, price)) + geom_jitter()
+ggplot(data = ames_train, aes(Neighborhood, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Lot.Config, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(MS.Zoning, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(MS.SubClass, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Bldg.Type, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(House.Style, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Street, log(price))) + geom_boxplot() + coord_flip()
+
+# Don't appear to matter:
+# Lot.Frontage
+# Utilities
+
+ggplot(data = ames_train, aes(Alley_vals, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Lot.Shape, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Land.Contour, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Utilities, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Land.Slope, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Condition.1, log(price))) + geom_boxplot() + coord_flip()
+
+ggplot(data = ames_train, aes(Condition.2, log(price))) + geom_boxplot() + coord_flip()
+
+
+
+ggplot(data = ames_train, aes(Year.Built, log(price))) + geom_point()
+
 
 ```
 
