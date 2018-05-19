@@ -28,6 +28,7 @@ library(BAS)
 library(ggplot2)
 library(scales)
 library(GGally)
+library(MASS)
 ```
 
 ## Part 1 - Exploratory Data Analysis (EDA)
@@ -42,33 +43,85 @@ After you have explored completely, submit the three graphs/plots that you found
 
 Understand all possible data:
 
-```{r all_data, echo=FALSE}
+```{r behind_the_scenes, message=FALSE}
 
+# List the variable names:
 names(ames_train)
 
-```
-
-
-There are some incomplete cases. The following table shows values where data are missing.
-
-```{r creategraphs, echo=FALSE}
+# Show fields missing values:
 missing <- sapply(ames_train, function(x) sum(is.na(x)))
 missing[missing>0]
+
+# Identidy and remove abnormal sale conditions:
+ames_train %>% group_by(Sale.Condition) %>% summarise(records = n())
+ames_train <- ames_train %>% filter(Sale.Condition == "Normal")
+ames_train <- ames_train[!names(ames_train) == "Sale.Condition"]
+
+# Convert integer MS.SubClass to data type character because it's a discrete variable loaded as a continuous variable.
+ames_train$MS.SubClass <- as.character(ames_train$MS.SubClass)
+ames_train$MS.SubClass[nchar(ames_train$MS.SubClass)==2] <- paste0("0",ames_train$MS.SubClass[nchar(ames_train$MS.SubClass)==2])
+
+# Convert NA Alley values to "No alley," to make the values usable in the model.
+ames_train$Alley_vals <- as.character(ames_train$Alley)
+ames_train$Alley_vals[is.na(ames_train$Alley_vals)] <- "No alley"
+
+# Because not all houses have basements, it's not advisable to use basement quality as an independent variable. This
+# replaces NA Bsmt.Qual values with FALSE, indicating that house does not have a basement, and all other values with TRUE,
+# indicating those houses do have a basement.
+ames_train$basement_dummy <- TRUE
+ames_train$basement_dummy[is.na(ames_train$Bsmt.Qual) | ames_train$Bsmt.Qual == ""] <- FALSE
+
+# Do the same with garage
+ames_train$garage_dummy <- TRUE
+ames_train$garage_dummy[is.na(ames_train$Garage.Type)] <- FALSE
+
+# Do the same with deck
+ames_train$deck_dummy <- FALSE
+ames_train$deck_dummy[ames_train$Wood.Deck.SF>0] <- TRUE
+
+# do the same with the various porch types
+ames_train$porch_dummy <- FALSE
+ames_train$porch_dummy[ames_train$Open.Porch.SF>0] <- TRUE
+ames_train$porch_dummy[ames_train$Enclosed.Porch>0] <- TRUE
+ames_train$porch_dummy[ames_train$X3Ssn.Porch>0] <- TRUE
+ames_train$porch_dummy[ames_train$Screen.Porch>0] <- TRUE
+
+# Do the same with pool
+ames_train$pool_dummy <- FALSE
+ames_train$pool_dummy[ames_train$Pool.Area>0] <- TRUE
+
+# do the same with Fence
+ames_train$fence_dummy <- TRUE
+ames_train$fence_dummy[is.na(ames_train$Fence)] <- FALSE
+
+# I want to consider the number of total bathrooms as a single variable. This converts the two separate bathroom variables
+# to a single variable by multiplying the number of full bathrooms by 1 and adding that to the number of half bathrooms multiplied by 1/2
+ames_train <- ames_train %>% mutate(bathrooms = Full.Bath * 1 + Half.Bath * 0.5)
+
+# As discussed above, we want to examine area and lot.area as logged values, as they are more linearly related to log price in that way.
+ames_train$area <- log(ames_train$area)
+ames_train$Lot.Area <- log(ames_train$Lot.Area)
+
+# The following drops all variables that will not be considered in the full model.
+drops <- c("PID", "Neighborhood", "Lot.Frontage", "Bsmt.Qual", "Bsmt.Cond", "Bsmt.Exposure", "BsmtFin.Type.1", "BsmtFin.Type.2", "BsmtFin.SF.1", "BsmtFin.SF.2", "Bsmt.Unf.SF", 
+           "Total.Bsmt.SF", "Bsmt.Full.Bath", "Bsmt.Half.Bath", "Garage.Type", "Garage.Yr.Blt", "Garage.Finish", "Garage.Cars", 
+           "Garage.Area", "Garage.Qual", "Garage.Cond", "Wood.Deck.SF", "Open.Porch.SF", "Enclosed.Porch", "X3Ssn.Porch",
+           "Screen.Porch", "Pool.Area", "Fence", "Fireplace.Qu", "Pool.QC", "Misc.Feature", "Misc.Val", "Yr.Sold", "Mo.Sold", "Sale.Type", 
+           "Sale.Condition", "Mas.Vnr.Type", "Mas.Vnr.Area", "X1st.Flr.SF", "X2nd.Flr.SF", "Low.Qual.Fin.SF", "TotRms.AbvGrd", "Condition.2","Alley", "Utilities", "Exter.Cond",
+           "House.Style", "Roof.Style", "Roof.Matl", "Exterior.1st", "Exterior.2nd", "Foundation")
+ames_train_red <- ames_train[,!(names(ames_train) %in% drops)]
+
 ```
+
 
 All fields missing data are "optional" fields, in that if a property does not contain a feature, the field will not be filled. For example, there are 21 properties that do not have basements. Once we deal with filtering the data, we will apply non-null values to the non-continuous values in order for them to be properly represented in the model.
 
 One field of interest is the sale condition. We only want to model the price for properties that were sold under normal conditions, as abnormal sales conditions are difficult to predict and may be unique circumstances that lead to a difference in the final purchase price. The following table shows the number of records by sale condition. We see that there are 166 records that sold for non-normal circumstances. These will be removed from the training data, leaving us with 834 records. The Sale.Condition field will then be dropped from the dataset.
 
-```{r sale_condition, echo=FALSE}
-ames_train %>% group_by(Sale.Condition) %>% summarise(records = n())
-ames_train <- ames_train %>% filter(Sale.Condition == "Normal")
-ames_train <- ames_train[!names(ames_train) == "Sale.Condition"]
-```
 
-There are some really big lots:
 
-```{r lot.area}
+```{r lot.area, message=FALSE}
+# There are some really big lots:
 ggplot(data = ames_train, aes(Lot.Area)) + 
   geom_histogram(binwidth = 1000) +
   scale_x_continuous(label = comma)
@@ -80,15 +133,11 @@ ggplot(data = ames_train, aes(log(Lot.Area), log(area))) +
 
 summary(lm(log(area)~log(Lot.Area), data = ames_train))
 
-```
+# When we look at price compared to large lots, the non-normal trend indicates we may need to log the variable.
 
-When we look at price compared to large lots, the non-normal trend indicates we may need to log the variable.
-
-```{r lot.area.x.price}
 ggplot(data = ames_train, aes(Lot.Area, price)) + 
   geom_point() +
   scale_x_continuous(label = comma)
-
 
 # Starting to make more sense and look more useful,
 ggplot(data = ames_train, aes(log(Lot.Area), price)) + 
@@ -99,20 +148,14 @@ ggplot(data = ames_train, aes(log(Lot.Area), price)) +
 ggplot(data = ames_train, aes(log(Lot.Area), log(price))) + 
   geom_point() +
   scale_x_continuous(label = comma)
-```
 
-
-Home square footage is right skewed and multi-modal.
-
-```{r home_area}
+# Home square footage is right skewed and multi-modal.
 ggplot(data = ames_train, aes(area)) + 
   geom_histogram() +
   scale_x_continuous(label = comma)
-```
 
-As with lot.area, home square footage can benefit from a log transformation:
+# As with lot.area, home square footage can benefit from a log transformation:
 
-```{r sqfootage.x.price}
 # Without transforming at all, area looks relatively usefully linear related to price.
 ggplot(data = ames_train, aes(area, price)) + 
   geom_point() +
@@ -128,6 +171,7 @@ ggplot(data = ames_train, aes(log(area), price)) +
 ggplot(data = ames_train, aes(log(area), log(price))) + 
   geom_point() +
   scale_x_continuous(label = comma)
+
 ```
 
 
@@ -139,105 +183,26 @@ ggplot(data = ames_train, aes(log(price))) + geom_histogram() + scale_x_continuo
 ames_train %>% summarise(median(price))
 ```
 
-
-Subclasses:
-We need to replace the subclass integer values as a factor. Most of the subclasses are 
-
-```{r subclasses}
-ames_train$MS.SubClass <- as.character(ames_train$MS.SubClass) # change to character data type
-ames_train$MS.SubClass[nchar(ames_train$MS.SubClass)==2] <- paste0("0",ames_train$MS.SubClass[nchar(ames_train$MS.SubClass)==2])
+```{r overall_qual, echo=FALSE}
+ggplot(data = ames_train, aes(y = price, x = factor(Overall.Qual))) + geom_boxplot() + scale_y_continuous(labels = dollar)
 ```
 
-Year Sold:
-Do we need to adjust for inflation? Probably not. There is some difference in buying power between 2006 and 2010, which spanned the years of the great recession. 
+```{r area, echo=FALSE}
+ggplot(data = ames_train, aes(y = log(price), x = log(area))) + geom_point() + scale_y_continuous(labels = dollar)
+```
 
 ```{r}
-ggplot(data = ames_train, aes(Yr.Sold)) + geom_bar()
+ggplot(data = ames_train, aes(y = price, x = factor(pool_dummy))) + geom_boxplot() + scale_y_continuous(labels = dollar)
 ```
 
-```{r variable.transforms}
-# Change alley characteristics to include whether there's an alley at all.
-ames_train$Alley_vals <- as.character(ames_train$Alley)
-ames_train$Alley_vals[is.na(ames_train$Alley_vals)] <- "No alley"
-
-ames_train$basement_dummy <- TRUE
-ames_train$basement_dummy[is.na(ames_train$Bsmt.Qual) | ames_train$Bsmt.Qual == ""] <- FALSE
-
-ames_train$garage_dummy <- TRUE
-ames_train$garage_dummy[is.na(ames_train$Garage.Type)] <- FALSE
-
-ames_train$deck_dummy <- FALSE
-ames_train$deck_dummy[ames_train$Wood.Deck.SF>0] <- TRUE
-
-ames_train$porch_dummy <- FALSE
-ames_train$porch_dummy[ames_train$Open.Porch.SF>0] <- TRUE
-ames_train$porch_dummy[ames_train$Enclosed.Porch>0] <- TRUE
-ames_train$porch_dummy[ames_train$X3Ssn.Porch>0] <- TRUE
-ames_train$porch_dummy[ames_train$Screen.Porch>0] <- TRUE
-
-ames_train$pool_dummy <- FALSE
-ames_train$pool_dummy[ames_train$Pool.Area>0] <- TRUE
-
-ames_train$fence_dummy <- TRUE
-ames_train$fence_dummy[is.na(ames_train$Fence)] <- FALSE
-
-drops <- c("Bsmt.Qual", "Bsmt.Cond", "Bsmt.Exposure", "BsmtFin.Type.1", "Bsmt.Fin.Type.2", "Bsmt.SF.1", "Bsmt.SF.2", "Bsmt.Unf.SF", 
-           "Total.Bsmt.SF", "Bsmt.Full.Bath", "Bsmt.Half.Bath", "Garage.Type", "Garage.Yr.Blt", "Garage.Finish", "Garage.Cars", 
-           "Garage.Area", "Garage.Qual", "Garage.Cond", "Wood.Deck.SF", "Open.Porch.SF", "Enclosed.Porch", "X3Ssn.Porch",
-           "Screen.Porch", "Pool.Area", "Fence")
-
-ames_train %>% group_by(Fence) %>% summarise(n())
-```
-
-
-Let's just make a bunch of correlation tables and do a bunch of anovas to see what looks significant.
-
-```{r}
-
-
-ggplot(data = ames_train, aes(Overall.Qual, log(price))) + geom_jitter()
-
-ggplot(data = ames_train, aes(Neighborhood, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(Lot.Config, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(MS.Zoning, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(MS.SubClass, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(Bldg.Type, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(House.Style, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(Street, log(price))) + geom_boxplot() + coord_flip()
-
-# Don't appear to matter:
-# Lot.Frontage
-# Utilities
-
-ggplot(data = ames_train, aes(Alley_vals, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(Lot.Shape, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(Land.Contour, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(Utilities, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(Land.Slope, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(Condition.1, log(price))) + geom_boxplot() + coord_flip()
-
-ggplot(data = ames_train, aes(Condition.2, log(price))) + geom_boxplot() + coord_flip()
-
-
-
-ggplot(data = ames_train, aes(Year.Built, log(price))) + geom_point()
-
-
-```
-
-
-
+Several values needed to be removed from the dataset because of inconsistent values between the training and test sets. These fields include:
+- Neighborhood
+- Exterior condition
+- Roof style
+- Roof material
+- Foundation
+- Exterior 1st
+- Exterior 2nd
 
 * * *
 
@@ -253,6 +218,22 @@ Based on your EDA, select *at most* 10 predictor variables from “ames_train”
 NOTE: Write your written response to section 2.1 here. Delete this note before you submit your work.
 
 ```{r fit_model}
+
+initial.model <- lm(log(price) ~ 
+                      log(area) + 
+                      log(Lot.Area) + 
+                      basement_dummy + 
+                      Overall.Qual + 
+                      bathrooms +
+                      Bedroom.AbvGr +
+                      Year.Built +
+                      MS.SubClass + 
+                      pool_dummy + 
+                      Bldg.Type
+                      ,data=ames_train_red)
+
+summary(initial.model)
+
 ```
 
 * * *
@@ -265,7 +246,14 @@ Now either using `BAS` another stepwise selection procedure choose the "best" mo
 
 NOTE: Write your written response to section 2.2 here. Delete this note before you submit your work.
 
-```{r model_select}
+```{r model_select, echo=FALSE}
+
+model.full <- lm(log(price) ~ ., data = ames_train_red)
+
+model.AIC <- stepAIC(model.full, direction = "backward", k = 2, trace = FALSE)
+
+summary(model.AIC)
+
 ```
 
 * * *
@@ -278,6 +266,8 @@ One way to assess the performance of a model is to examine the model's residuals
 NOTE: Write your written response to section 2.3 here. Delete this note before you submit your work.
 
 ```{r model_resid}
+plot(model.AIC$residuals)
+# qqplot(model.AIC$residuals)
 ```
 
 * * *
@@ -292,6 +282,7 @@ NOTE: Write your written response to section 2.4 here. Delete this note before y
 
 
 ```{r model_rmse}
+sqrt(mean(ames_train_red$price - exp(predict(model.AIC, ames_train_red))))
 ```
 
 * * *
@@ -300,8 +291,40 @@ NOTE: Write your written response to section 2.4 here. Delete this note before y
 
 The process of building a model generally involves starting with an initial model (as you have done above), identifying its shortcomings, and adapting the model accordingly. This process may be repeated several times until the model fits the data reasonably well. However, the model may do well on training data but perform poorly out-of-sample (meaning, on a dataset other than the original training data) because the model is overly-tuned to specifically fit the training data. This is called “overfitting.” To determine whether overfitting is occurring on a model, compare the performance of a model on both in-sample and out-of-sample data sets. To look at performance of your initial model on out-of-sample data, you will use the data set `ames_test`.
 
-```{r loadtest, message = FALSE}
+```{r loadtest, echo=FALSE}
 load("ames_test.Rdata")
+
+ames_test$MS.SubClass <- as.character(ames_test$MS.SubClass) # change to character data type
+ames_test$MS.SubClass[nchar(ames_test$MS.SubClass)==2] <- paste0("0",ames_test$MS.SubClass[nchar(ames_test$MS.SubClass)==2])
+
+ames_test$Alley_vals <- as.character(ames_test$Alley)
+ames_test$Alley_vals[is.na(ames_test$Alley_vals)] <- "No alley"
+
+ames_test$basement_dummy <- TRUE
+ames_test$basement_dummy[is.na(ames_test$Bsmt.Qual) | ames_test$Bsmt.Qual == ""] <- FALSE
+
+ames_test$garage_dummy <- TRUE
+ames_test$garage_dummy[is.na(ames_test$Garage.Type)] <- FALSE
+
+ames_test$deck_dummy <- FALSE
+ames_test$deck_dummy[ames_test$Wood.Deck.SF>0] <- TRUE
+
+ames_test$porch_dummy <- FALSE
+ames_test$porch_dummy[ames_test$Open.Porch.SF>0] <- TRUE
+ames_test$porch_dummy[ames_test$Enclosed.Porch>0] <- TRUE
+ames_test$porch_dummy[ames_test$X3Ssn.Porch>0] <- TRUE
+ames_test$porch_dummy[ames_test$Screen.Porch>0] <- TRUE
+
+ames_test$pool_dummy <- FALSE
+ames_test$pool_dummy[ames_test$Pool.Area>0] <- TRUE
+
+ames_test$fence_dummy <- TRUE
+ames_test$fence_dummy[is.na(ames_test$Fence)] <- FALSE
+
+ames_test <- ames_test %>% mutate(bathrooms = Full.Bath * 1 + Half.Bath * 0.5)
+
+ames_test$area <- log(ames_test$area)
+ames_test$Lot.Area <- log(ames_test$Lot.Area)
 ```
 
 Use your model from above to generate predictions for the housing prices in the test data set.  Are the predictions significantly more accurate (compared to the actual sales prices) for the training data than the test data?  Why or why not? Briefly explain how you determined that (what steps or processes did you use)?
@@ -310,7 +333,8 @@ Use your model from above to generate predictions for the housing prices in the 
 
 NOTE: Write your written response to section 2.5 here. Delete this note before you submit your work.
 
-```{r initmodel_test}
+```{r initmodel_test, echo=FALSE}
+sqrt(mean(ames_test$price - exp(predict(model.AIC, ames_test))))
 ```
 
 * * *
@@ -329,24 +353,72 @@ Provide the summary table for your model.
 
 * * *
 
-NOTE: Write your written response to section 3.1 here. Delete this note before you submit your work.
+I compared a backwards selection by AIC with a forwards selection by AIC and and backwards and forwards selection by BIC. The forward selected models were the best fits to the training data. But the best fit to the test data was the backwards selected by AIC model. All four models were overfit.
 
 
-```{r model_playground}
+```{r model_playground, echo=FALSE}
+model.AIC.forward <- stepAIC(model.full, direction = "forward", k = 2, trace = FALSE)
+
+model.BIC <- stepAIC(model.full, direction = "backward", k = log(834), trace = FALSE)
+
+model.BIC.forward <- stepAIC(model.full, direction = "forward", k = log(834), trace = FALSE)
+
+sqrt(mean(ames_train_red$price - exp(predict(model.AIC, ames_train_red))))
+sqrt(mean(ames_train_red$price - exp(predict(model.AIC.forward, ames_train_red))))
+sqrt(mean(ames_train_red$price - exp(predict(model.BIC, ames_train_red))))
+sqrt(mean(ames_train_red$price - exp(predict(model.BIC.forward, ames_train_red))))
+
+
+sqrt(mean(ames_test$price - exp(predict(model.AIC, ames_test))))
+sqrt(mean(ames_test$price - exp(predict(model.AIC.forward, ames_test))))
+sqrt(mean(ames_test$price - exp(predict(model.BIC, ames_test))))
+sqrt(mean(ames_test$price - exp(predict(model.BIC.forward, ames_test))))
+
+
+
 ```
+
+```{r final_model}
+model.proposed <- lm(log(price) ~
+                       area +
+                       MS.SubClass +
+                       MS.Zoning +
+                       Lot.Area +
+                       Land.Slope +
+                       Condition.1 +
+                       Overall.Qual +
+                       Overall.Cond +
+                       Year.Remod.Add +
+                       Exter.Qual +
+                       Heating +
+                       Central.Air +
+                       Bedroom.AbvGr +
+                       Kitchen.Qual +
+                       Functional +
+                       Paved.Drive +
+                       Alley_vals +
+                       Fireplaces +
+                       basement_dummy +
+                       pool_dummy,
+                     data = ames_train_red)
+
+summary(model.proposed)
+sqrt(mean(ames_train_red$price - exp(predict(model.proposed, ames_train_red))))
+sqrt(mean(ames_test$price - exp(predict(model.proposed, ames_test))))
+```
+
 
 * * *
 
 ### Section 3.2 Transformation
 
-Did you decide to transform any variables?  Why or why not? Explain in a few sentences.
-
 * * *
 
-NOTE: Write your written response to section 3.2 here. Delete this note before you submit your work.
+As discussed in section 1, I transformed several variables, including price, area, and Lot.Area. The distribution of values for these variables were right-skewed, and when plotted against eachother looked non-linear. I performed a log transformation of all three variables before inputting into the model.
 
-```{r model_assess}
-```
+Additionally, I created some dummy variables for variables with incomeplete cases, where the absence of a value indicated that the feature was not present. This allowed me to use the precense (or lack thereof) of a feature in the model. I did this for pool, basement, fence, porch, and deck.
+
+Further, I needed to do some transformations to change the data types of several variables in order to make them useful in the model. MS.SubClass was imported as a continuous value, though it should be treated as a discrete nominal value.
 
 * * *
 
@@ -369,10 +441,9 @@ What method did you use to select the variables you included? Why did you select
 
 * * *
 
-NOTE: Write your written response to section 3.4 here. Delete this note before you submit your work.
+I used a backward selection by AIC to select the variables to include in the model. This method involves creating a full model, with all variables considered for inclusion in the model, then removing variables one by one and comparing the AIC values for each simplified model. The model with the lowest AIC indicates the most parimonious model, and that process is repeated using that model as the new "full model." This process is repeated until removing a variable does not improve the AIC.
 
-```{r model_select}
-```
+
 
 * * *
 
@@ -382,10 +453,7 @@ How did testing the model on out-of-sample data affect whether or how you change
 
 * * *
 
-NOTE: Write your written response to section 3.5 here. Delete this note before you submit your work.
-
-```{r model_testing}
-```
+I used RMSE to compare the results from the model chosen by backward selection by AIC with using three other methods: forward selection by AIC, backward selection by BIC, and forward selection by AIC. The backward selection by AIC had the best RMSE score for the test dataset. Though the RMSE results from all models indicate they are overfit, the difference is roughly $20, and that seems close enough for me.
 
 * * *
 
