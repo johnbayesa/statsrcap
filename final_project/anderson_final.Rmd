@@ -192,7 +192,7 @@ ggplot(data = ames_train, aes(y = log(price), x = log(area))) + geom_point() + s
 ```
 
 ```{r}
-ggplot(data = ames_train, aes(y = price, x = factor(pool_dummy))) + geom_boxplot() + scale_y_continuous(labels = dollar)
+ggplot(data = ames_train, aes(Neighborhood, price)) + geom_boxplot() + scale_y_continuous(labels = dollar) + coord_flip()
 ```
 
 Several values needed to be removed from the dataset because of inconsistent values between the training and test sets. These fields include:
@@ -293,6 +293,10 @@ The process of building a model generally involves starting with an initial mode
 
 ```{r loadtest, echo=FALSE}
 load("ames_test.Rdata")
+
+ames_test %>% group_by(Sale.Condition) %>% summarise(records = n())
+ames_test <- ames_test %>% filter(Sale.Condition == "Normal")
+ames_test <- ames_test[!names(ames_test) == "Sale.Condition"]
 
 ames_test$MS.SubClass <- as.character(ames_test$MS.SubClass) # change to character data type
 ames_test$MS.SubClass[nchar(ames_test$MS.SubClass)==2] <- paste0("0",ames_test$MS.SubClass[nchar(ames_test$MS.SubClass)==2])
@@ -405,6 +409,11 @@ model.proposed <- lm(log(price) ~
 summary(model.proposed)
 sqrt(mean(ames_train_red$price - exp(predict(model.proposed, ames_train_red))))
 sqrt(mean(ames_test$price - exp(predict(model.proposed, ames_test))))
+
+
+ames_test$predicted <- exp(predict(model.proposed, ames_test))
+ames_test <- ames_test %>% mutate(resids = price - predicted)
+ames_test %>% group_by(Neighborhood) %>% summarise(mean(resids))
 ```
 
 
@@ -428,10 +437,7 @@ Did you decide to include any variable interactions? Why or why not? Explain in 
 
 * * *
 
-NOTE: Write your written response to section 3.3 here. Delete this note before you submit your work.
-
-```{r model_inter}
-```
+I elected not to include any variable interaction in the model. A possible side-effect of modeling variable interactions is overfitting. Because the model is already overfit, I elected not to model any variable interactions.
 
 * * *
 
@@ -464,8 +470,12 @@ I used RMSE to compare the results from the model chosen by backward selection b
 For your final model, create and briefly interpret an informative plot of the residuals.
 
 * * *
+The residuals appear to be randomly distributed and nearly normal, which is a good sign for the model.
 
-NOTE: Write your written response to section 4.1 here. Delete this note before you submit your work.
+```{r final_resids, echo=FALSE}
+plot(model.proposed$residuals)
+```
+
 
 * * *
 
@@ -475,7 +485,7 @@ For your final model, calculate and briefly comment on the RMSE.
 
 * * *
 
-NOTE: Write your written response to section 4.2 here. Delete this note before you submit your work.
+The model's RMSE for the training data is \$34.86644, and for the test set is \$52.582. Though the model appears to be overfit, as the RMSE for the test set was appreciably different than the training set, the RMSE is fairly low relative to the median price of a home in the dataset.
 
 * * *
 
@@ -485,7 +495,7 @@ What are some strengths and weaknesses of your model?
 
 * * *
 
-NOTE: Write your written response to section 4.3 here. Delete this note before you submit your work.
+The model seems to underestimate the prices of homes in certain neighborhoods more than other neighborhoods. Specifically, homes in North Ridge, Northridge Heights, and Landmark seemed to be the most underestimated. I'd have included neighborhood in the model, but not all neighborhoods are represented in the training data.
 
 * * *
 
@@ -501,6 +511,42 @@ You will use the “ames_validation” dataset to do some additional assessment 
 
 ```{r loadvalidation, message = FALSE}
 load("ames_validation.Rdata")
+ames_validation %>% group_by(Sale.Condition) %>% summarise(records = n())
+ames_validation <- ames_validation %>% filter(Sale.Condition == "Normal")
+ames_validation <- ames_validation[!names(ames_validation) == "Sale.Condition"]
+
+ames_validation$MS.SubClass <- as.character(ames_validation$MS.SubClass) # change to character data type
+ames_validation$MS.SubClass[nchar(ames_validation$MS.SubClass)==2] <- paste0("0",ames_validation$MS.SubClass[nchar(ames_validation$MS.SubClass)==2])
+
+ames_validation$Alley_vals <- as.character(ames_validation$Alley)
+ames_validation$Alley_vals[is.na(ames_validation$Alley_vals)] <- "No alley"
+
+ames_validation$basement_dummy <- TRUE
+ames_validation$basement_dummy[is.na(ames_validation$Bsmt.Qual) | ames_validation$Bsmt.Qual == ""] <- FALSE
+
+ames_validation$garage_dummy <- TRUE
+ames_validation$garage_dummy[is.na(ames_validation$Garage.Type)] <- FALSE
+
+ames_validation$deck_dummy <- FALSE
+ames_validation$deck_dummy[ames_validation$Wood.Deck.SF>0] <- TRUE
+
+ames_validation$porch_dummy <- FALSE
+ames_validation$porch_dummy[ames_validation$Open.Porch.SF>0] <- TRUE
+ames_validation$porch_dummy[ames_validation$Enclosed.Porch>0] <- TRUE
+ames_validation$porch_dummy[ames_validation$X3Ssn.Porch>0] <- TRUE
+ames_validation$porch_dummy[ames_validation$Screen.Porch>0] <- TRUE
+
+ames_validation$pool_dummy <- FALSE
+ames_validation$pool_dummy[ames_validation$Pool.Area>0] <- TRUE
+
+ames_validation$fence_dummy <- TRUE
+ames_validation$fence_dummy[is.na(ames_validation$Fence)] <- FALSE
+
+ames_validation <- ames_validation %>% mutate(bathrooms = Full.Bath * 1 + Half.Bath * 0.5)
+
+ames_validation$area <- log(ames_validation$area)
+ames_validation$Lot.Area <- log(ames_validation$Lot.Area)
+
 ```
 
 * * *
@@ -508,6 +554,7 @@ load("ames_validation.Rdata")
 NOTE: Write your written response to section 4.4 here. Delete this note before you submit your work.
 
 ```{r model_validate}
+sqrt(mean(ames_validation$price - exp(predict(model.proposed, ames_validation))))
 ```
 
 * * *
