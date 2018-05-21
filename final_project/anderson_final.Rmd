@@ -41,19 +41,19 @@ After you have explored completely, submit the three graphs/plots that you found
 
 * * *
 
-Understand all possible data:
+The three datasets used in this analysis come from the AmesHousing data, which, according to the codebook documentation, "contains information from the Ames [Iowa] Assessor's Office ... from 2006 to 2010." The total dataset includes 2930 observations. These data have been divided into training, test, and validation datasets for use in this analysis. It's worth noting that these observations were taken from a time period that included the end of a period of record home prices, and the start of the so-called Great Recession, during which housing prices were severely depressed due to the sub-prime mortgage crisis. As such, modeled results may imperfectly reflect the current market conditions.
+
+The training data include 1000 observations of 81 data points. 
+
+Most fields are complete, where each of the 1000 observations has a value, but there are some fields missing data. All fields missing data are from "optional" fields, in that if a property does not contain a feature, the field will not be filled. For example, there are 21 properties that do not have basements, so the basement quality field for those rows is not filled. In these cases, lack of a feature is of interest, as the absence of a basement or a pool might be a significant predictor of sale price. I've created "dummy variables" to note properties that do not have certain features. These variables display a TRUE value if a property has a feature, and a FALSE value if not. Once the dummy variables are created, the more detailed data are dropped from the dataset.
+
+There are several observations where a sale was made under abnormal cicumstances. We only want to model the price for properties that were sold under normal conditions, as abnormal sales conditions are often under unique circumstances that lead to a differences in the final purchase price that are otherwise very difficult to predict and are not useful for our uses. There are 166 records that sold for non-normal circumstances. These will be removed from the training data, leaving us with 834 records. The Sale.Condition field will then be dropped from the dataset.
 
 ```{r behind_the_scenes, message=FALSE}
-
-# List the variable names:
-names(ames_train)
-
 # Show fields missing values:
 missing <- sapply(ames_train, function(x) sum(is.na(x)))
-missing[missing>0]
 
 # Identidy and remove abnormal sale conditions:
-ames_train %>% group_by(Sale.Condition) %>% summarise(records = n())
 ames_train <- ames_train %>% filter(Sale.Condition == "Normal")
 ames_train <- ames_train[!names(ames_train) == "Sale.Condition"]
 
@@ -102,107 +102,52 @@ ames_train <- ames_train %>% mutate(bathrooms = Full.Bath * 1 + Half.Bath * 0.5)
 ames_train$area <- log(ames_train$area)
 ames_train$Lot.Area <- log(ames_train$Lot.Area)
 
+#Create a matrix of Neighborhood
+ames_train <- cbind(ames_train, model.matrix(~Neighborhood, ames_train))
+ames_train <- cbind(ames_train,model.matrix(~MS.SubClass, ames_train))
+ames_train <- cbind(ames_train,model.matrix(~House.Style, ames_train))
+ames_train <- cbind(ames_train,model.matrix(~Roof.Style, ames_train))
+ames_train <- cbind(ames_train,model.matrix(~Roof.Matl, ames_train))
+
 # The following drops all variables that will not be considered in the full model.
 drops <- c("PID", "Neighborhood", "Lot.Frontage", "Bsmt.Qual", "Bsmt.Cond", "Bsmt.Exposure", "BsmtFin.Type.1", "BsmtFin.Type.2", "BsmtFin.SF.1", "BsmtFin.SF.2", "Bsmt.Unf.SF", 
            "Total.Bsmt.SF", "Bsmt.Full.Bath", "Bsmt.Half.Bath", "Garage.Type", "Garage.Yr.Blt", "Garage.Finish", "Garage.Cars", 
            "Garage.Area", "Garage.Qual", "Garage.Cond", "Wood.Deck.SF", "Open.Porch.SF", "Enclosed.Porch", "X3Ssn.Porch",
            "Screen.Porch", "Pool.Area", "Fence", "Fireplace.Qu", "Pool.QC", "Misc.Feature", "Misc.Val", "Yr.Sold", "Mo.Sold", "Sale.Type", 
            "Sale.Condition", "Mas.Vnr.Type", "Mas.Vnr.Area", "X1st.Flr.SF", "X2nd.Flr.SF", "Low.Qual.Fin.SF", "TotRms.AbvGrd", "Condition.2","Alley", "Utilities", "Exter.Cond",
-           "House.Style", "Roof.Style", "Roof.Matl", "Exterior.1st", "Exterior.2nd", "Foundation")
+           "House.Style", "Roof.Style", "Roof.Matl", "Exterior.1st", "Exterior.2nd", "Foundation", "MS.SubClass", "(Intercept)", "(Intercept).1", "(Intercept).2", "(Intercept).3",
+           "(Intercept).4", "(Intercept).5")
 ames_train_red <- ames_train[,!(names(ames_train) %in% drops)]
 
 ```
 
 
-All fields missing data are "optional" fields, in that if a property does not contain a feature, the field will not be filled. For example, there are 21 properties that do not have basements. Once we deal with filtering the data, we will apply non-null values to the non-continuous values in order for them to be properly represented in the model.
-
-One field of interest is the sale condition. We only want to model the price for properties that were sold under normal conditions, as abnormal sales conditions are difficult to predict and may be unique circumstances that lead to a difference in the final purchase price. The following table shows the number of records by sale condition. We see that there are 166 records that sold for non-normal circumstances. These will be removed from the training data, leaving us with 834 records. The Sale.Condition field will then be dropped from the dataset.
-
-
-
-```{r lot.area, message=FALSE}
-# There are some really big lots:
-ggplot(data = ames_train, aes(Lot.Area)) + 
-  geom_histogram(binwidth = 1000) +
-  scale_x_continuous(label = comma)
-
-# Are lot size and home size colinear? Yes, significantly, but the fit isn't great.
-ggplot(data = ames_train, aes(log(Lot.Area), log(area))) + 
-  geom_point() +
-  scale_x_continuous(label = comma)
-
-summary(lm(log(area)~log(Lot.Area), data = ames_train))
-
-# When we look at price compared to large lots, the non-normal trend indicates we may need to log the variable.
-
-ggplot(data = ames_train, aes(Lot.Area, price)) + 
-  geom_point() +
-  scale_x_continuous(label = comma)
-
-# Starting to make more sense and look more useful,
-ggplot(data = ames_train, aes(log(Lot.Area), price)) + 
-  geom_point() +
-  scale_x_continuous(label = comma)
-
-# One more transforamtion makes things look much more useful.
-ggplot(data = ames_train, aes(log(Lot.Area), log(price))) + 
-  geom_point() +
-  scale_x_continuous(label = comma)
-
-# Home square footage is right skewed and multi-modal.
-ggplot(data = ames_train, aes(area)) + 
-  geom_histogram() +
-  scale_x_continuous(label = comma)
-
-# As with lot.area, home square footage can benefit from a log transformation:
-
-# Without transforming at all, area looks relatively usefully linear related to price.
-ggplot(data = ames_train, aes(area, price)) + 
-  geom_point() +
-  scale_x_continuous(label = comma)
-
-
-# This actually makes the relationship look less linear.
-ggplot(data = ames_train, aes(log(area), price)) + 
-  geom_point() +
-  scale_x_continuous(label = comma)
-
-# One more transforamtion makes things look much more useful.
-ggplot(data = ames_train, aes(log(area), log(price))) + 
-  geom_point() +
-  scale_x_continuous(label = comma)
-
-```
-
-
-Price is right skewed, as you might expect with a continuous variable bound by $0 on the low and structurally unbound on the high. Logging the data gives us a nearly normal distribution around a median of \$159,467.
+Our dependent variable in the upcoming analysis is home price. Price is right skewed, as you might expect with a continuous variable bound by $0 on the low and hypothetically unbound on the high. The median is \$159,467. Logging the data gives us a nearly normal distribution, as shown in the following graph. 
 
 ```{r price_hist, echo=FALSE}
-ggplot(data = ames_train, aes(price)) + geom_histogram() + scale_x_continuous(labels = dollar)
-ggplot(data = ames_train, aes(log(price))) + geom_histogram() + scale_x_continuous(labels = dollar)
-ames_train %>% summarise(median(price))
+ggplot(data = ames_train, aes(log(price))) + geom_histogram(binwidth = 0.1) + scale_x_continuous(labels = dollar) + xlab("Price") + ylab("Observations")
+# ggplot(data = ames_train, aes(log(price))) + geom_histogram() + scale_x_continuous(labels = dollar)
+# ames_train %>% summarise(median(price))
 ```
+
+All of the data points were examined for association with price. Several variables stood out as especially likely predictors of price. First, overall quality appears to be highly related to price. The following boxplot shows differences in price by overall quality.
 
 ```{r overall_qual, echo=FALSE}
-ggplot(data = ames_train, aes(y = price, x = factor(Overall.Qual))) + geom_boxplot() + scale_y_continuous(labels = dollar)
+ggplot(data = ames_train, aes(y = price, x = factor(Overall.Qual))) + geom_boxplot() + scale_y_continuous(labels = dollar) + xlab("Overall Quality") + ylab("Price")
 ```
+
+Secondly, home squarefootage appears to be related to price, and the relationship appears more linear with a log transform on both price and area.
 
 ```{r area, echo=FALSE}
-ggplot(data = ames_train, aes(y = log(price), x = log(area))) + geom_point() + scale_y_continuous(labels = dollar)
+ggplot(data = ames_train, aes(y = log(price), x = log(area))) + geom_point() + scale_y_continuous(labels = dollar) + xlab("Square Feet (Log)") + ylab("Price (Log)")
 ```
 
-```{r}
-ggplot(data = ames_train, aes(Neighborhood, price)) + geom_boxplot() + scale_y_continuous(labels = dollar) + coord_flip()
+Finally, neighborhood appears to be associated with price. Neighborhood can capture features not included in the dataset, including walkability to local amenities, local school quality, and other features. The following is a boxplot of housing price by neighborhood.
+
+```{r neighborhood, echo=FALSE}
+ggplot(data = ames_train, aes(Neighborhood, price)) + geom_boxplot() + scale_y_continuous(labels = dollar) + coord_flip() + ylab("Price")
 ```
 
-Several values needed to be removed from the dataset because of inconsistent values between the training and test sets. These fields include:
-- Neighborhood
-- Exterior condition
-- Roof style
-- Roof material
-- Foundation
-- Exterior 1st
-- Exterior 2nd
 
 * * *
 
@@ -215,7 +160,7 @@ Based on your EDA, select *at most* 10 predictor variables from “ames_train”
 
 * * *
 
-NOTE: Write your written response to section 2.1 here. Delete this note before you submit your work.
+Square footage and lot area appear to be related to price, which make sense as these values directly represent the amount of living space and overall space on a property. The presence of a basement provides additional space living and storage, and is likely to contribute to higher prices. Overall quality appears to be related to price, which makes sense, as this likely indicates how desireable the various features on a property might be to a prospective buyer. Bathrooms and bedrooms are typically saught after features, as are pools. The year of construction likely determines whether a building needs upgrades or improvements, which might affect the final price. Finally, some building types are more desireable than others, and this might have an influence on the final price. I factored all of these values into the initial model.
 
 ```{r fit_model}
 
@@ -227,7 +172,6 @@ initial.model <- lm(log(price) ~
                       bathrooms +
                       Bedroom.AbvGr +
                       Year.Built +
-                      MS.SubClass + 
                       pool_dummy + 
                       Bldg.Type
                       ,data=ames_train_red)
@@ -235,6 +179,8 @@ initial.model <- lm(log(price) ~
 summary(initial.model)
 
 ```
+
+The model explains 87% of the variance in purchase price, according to the adjusted R^2 value. The pool variable seems to be an insignificant predictor variable, and building type is only marginally signficiant. These values will likely be excluded in future models.
 
 * * *
 
@@ -244,7 +190,7 @@ Now either using `BAS` another stepwise selection procedure choose the "best" mo
 
 * * *
 
-NOTE: Write your written response to section 2.2 here. Delete this note before you submit your work.
+I used two model selection methods, backward selection by AIC and backward selection by BIC.
 
 ```{r model_select, echo=FALSE}
 
@@ -252,9 +198,23 @@ model.full <- lm(log(price) ~ ., data = ames_train_red)
 
 model.AIC <- stepAIC(model.full, direction = "backward", k = 2, trace = FALSE)
 
+# Summary AIC selected model
 summary(model.AIC)
 
+model.BIC <- stepAIC(model.full, direction = "backward", k = log(834), trace = FALSE)
+
+# Summary BIC selected model
+summary(model.BIC)
+
+# AIC selected model RMSE
+sqrt(mean(ames_train_red$price - exp(predict(model.AIC, ames_train_red))))
+
+# BIC selected model RMSE
+sqrt(mean(ames_train_red$price - exp(predict(model.BIC, ames_train_red))))
+
 ```
+
+The AIC selected model includes the deck dummy variable, kitchen quality, land slope, condition 1, building type, number of above ground bedrooms, and several neighborhoods, roof styles and subclasses not selected by the BIC model. The BIC model had a lower adjusted R^2 value and RMSE, but is quite a bit simpler than the AIC selected model. The parismony of the BIC model is appealing, despite the lower fit metrics. The AIC model may be more overfit than the BIC model.
 
 * * *
 
@@ -263,11 +223,14 @@ One way to assess the performance of a model is to examine the model's residuals
 
 * * *
 
-NOTE: Write your written response to section 2.3 here. Delete this note before you submit your work.
+The residuals appear to be normally distributed and random. There are several outliers, which I'll examine more thoroughly in the validation section.
 
 ```{r model_resid}
+# AIC selected model residuals
 plot(model.AIC$residuals)
-# qqplot(model.AIC$residuals)
+
+# BIC selected model residuals
+plot(model.BIC$residuals)
 ```
 
 * * *
@@ -278,11 +241,15 @@ You can calculate it directly based on the model output. Be specific about the u
 
 * * *
 
-NOTE: Write your written response to section 2.4 here. Delete this note before you submit your work.
+The root mean squared error is just over \$29 for the AIC selected model, and just over \$33 dollars for the BIC selected model.
 
 
 ```{r model_rmse}
+# AIC selected model RMSE
 sqrt(mean(ames_train_red$price - exp(predict(model.AIC, ames_train_red))))
+
+# BIC selected model RMSE
+sqrt(mean(ames_train_red$price - exp(predict(model.BIC, ames_train_red))))
 ```
 
 * * *
@@ -291,7 +258,7 @@ sqrt(mean(ames_train_red$price - exp(predict(model.AIC, ames_train_red))))
 
 The process of building a model generally involves starting with an initial model (as you have done above), identifying its shortcomings, and adapting the model accordingly. This process may be repeated several times until the model fits the data reasonably well. However, the model may do well on training data but perform poorly out-of-sample (meaning, on a dataset other than the original training data) because the model is overly-tuned to specifically fit the training data. This is called “overfitting.” To determine whether overfitting is occurring on a model, compare the performance of a model on both in-sample and out-of-sample data sets. To look at performance of your initial model on out-of-sample data, you will use the data set `ames_test`.
 
-```{r loadtest, echo=FALSE}
+```{r loadtest, message=FALSE, echo=FALSE}
 load("ames_test.Rdata")
 
 ames_test %>% group_by(Sale.Condition) %>% summarise(records = n())
@@ -329,16 +296,29 @@ ames_test <- ames_test %>% mutate(bathrooms = Full.Bath * 1 + Half.Bath * 0.5)
 
 ames_test$area <- log(ames_test$area)
 ames_test$Lot.Area <- log(ames_test$Lot.Area)
+
+ames_test <- cbind(ames_test, model.matrix(~Neighborhood, ames_test))
+ames_test <- cbind(ames_test,model.matrix(~MS.SubClass, ames_test))
+ames_test <- cbind(ames_test,model.matrix(~House.Style, ames_test))
+ames_test <- cbind(ames_test,model.matrix(~Roof.Style, ames_test))
+ames_test <- cbind(ames_test,model.matrix(~Roof.Matl, ames_test))
+
+ames_test <- ames_test[,!(names(ames_test) %in% drops)]
+
 ```
 
 Use your model from above to generate predictions for the housing prices in the test data set.  Are the predictions significantly more accurate (compared to the actual sales prices) for the training data than the test data?  Why or why not? Briefly explain how you determined that (what steps or processes did you use)?
 
 * * *
 
-NOTE: Write your written response to section 2.5 here. Delete this note before you submit your work.
+The RMSE values for the AIC and BIC models are both higher in the ames_test data than the training data. This suggests that the model is overfit, though the values are highter, the RMSE values are still less than $60, which indicates the predictions are fairly accurate.
 
 ```{r initmodel_test, echo=FALSE}
+# AIC selected model test set prediction RMSE
 sqrt(mean(ames_test$price - exp(predict(model.AIC, ames_test))))
+
+# BIC selected model test set prediction RMSE
+sqrt(mean(ames_test$price - exp(predict(model.BIC, ames_test))))
 ```
 
 * * *
@@ -360,16 +340,16 @@ Provide the summary table for your model.
 I compared a backwards selection by AIC with a forwards selection by AIC and and backwards and forwards selection by BIC. The forward selected models were the best fits to the training data. But the best fit to the test data was the backwards selected by AIC model. All four models were overfit.
 
 
-```{r model_playground, echo=FALSE}
+```{r model_playground, echo=FALSE, message=FALSE}
 model.AIC.forward <- stepAIC(model.full, direction = "forward", k = 2, trace = FALSE)
 
-model.BIC <- stepAIC(model.full, direction = "backward", k = log(834), trace = FALSE)
+
 
 model.BIC.forward <- stepAIC(model.full, direction = "forward", k = log(834), trace = FALSE)
 
-sqrt(mean(ames_train_red$price - exp(predict(model.AIC, ames_train_red))))
+
 sqrt(mean(ames_train_red$price - exp(predict(model.AIC.forward, ames_train_red))))
-sqrt(mean(ames_train_red$price - exp(predict(model.BIC, ames_train_red))))
+
 sqrt(mean(ames_train_red$price - exp(predict(model.BIC.forward, ames_train_red))))
 
 
@@ -383,37 +363,27 @@ sqrt(mean(ames_test$price - exp(predict(model.BIC.forward, ames_test))))
 ```
 
 ```{r final_model}
-model.proposed <- lm(log(price) ~
-                       area +
-                       MS.SubClass +
-                       MS.Zoning +
-                       Lot.Area +
-                       Land.Slope +
-                       Condition.1 +
-                       Overall.Qual +
-                       Overall.Cond +
-                       Year.Remod.Add +
-                       Exter.Qual +
-                       Heating +
-                       Central.Air +
-                       Bedroom.AbvGr +
-                       Kitchen.Qual +
-                       Functional +
-                       Paved.Drive +
-                       Alley_vals +
-                       Fireplaces +
-                       basement_dummy +
-                       pool_dummy,
+model.proposed <- lm(log(price) ~ area + Lot.Area + Land.Slope + Condition.1 + Bldg.Type + Overall.Qual + Overall.Cond + Year.Built + 
+                       Year.Remod.Add + Exter.Qual + Central.Air + Bedroom.AbvGr + Kitchen.AbvGr + Kitchen.Qual + Functional + 
+                       Fireplaces + basement_dummy + deck_dummy + NeighborhoodBlueste + NeighborhoodBrkSide + NeighborhoodCollgCr + 
+                       NeighborhoodCrawfor + NeighborhoodEdwards + NeighborhoodGilbert + NeighborhoodGreens + NeighborhoodGrnHill + 
+                       NeighborhoodMeadowV + NeighborhoodNoRidge + NeighborhoodNridgHt + NeighborhoodNWAmes + NeighborhoodSawyerW + 
+                       NeighborhoodSomerst + NeighborhoodStoneBr + NeighborhoodVeenker + MS.SubClass030 + MS.SubClass040 + 
+                       MS.SubClass050 + MS.SubClass060 + MS.SubClass080 + MS.SubClass085 + MS.SubClass120 + MS.SubClass190,
                      data = ames_train_red)
 
+# Proposed model summary
 summary(model.proposed)
+
+# Proposed model training set RMSE
 sqrt(mean(ames_train_red$price - exp(predict(model.proposed, ames_train_red))))
+# Proposed model test set RMSE
 sqrt(mean(ames_test$price - exp(predict(model.proposed, ames_test))))
 
 
 ames_test$predicted <- exp(predict(model.proposed, ames_test))
-ames_test <- ames_test %>% mutate(resids = price - predicted)
-ames_test %>% group_by(Neighborhood) %>% summarise(mean(resids))
+ames_test$resids <- ames_test$price - ames_test$predicted
+ames_test <- ames_test[,!(names(ames_test) == "(Intercept)")]
 ```
 
 
@@ -547,15 +517,37 @@ ames_validation <- ames_validation %>% mutate(bathrooms = Full.Bath * 1 + Half.B
 ames_validation$area <- log(ames_validation$area)
 ames_validation$Lot.Area <- log(ames_validation$Lot.Area)
 
+ames_validation <- cbind(ames_validation, model.matrix(~Neighborhood, ames_validation))
+ames_validation <- cbind(ames_validation,model.matrix(~MS.SubClass, ames_validation))
+ames_validation <- cbind(ames_validation,model.matrix(~House.Style, ames_validation))
+ames_validation <- cbind(ames_validation,model.matrix(~Roof.Style, ames_validation))
+ames_validation <- cbind(ames_validation,model.matrix(~Roof.Matl, ames_validation))
+
+ames_validation <- ames_validation[,!(names(ames_validation) %in% drops)]
+
 ```
 
 * * *
 
-NOTE: Write your written response to section 4.4 here. Delete this note before you submit your work.
+The RMSE value for the validation data is just over $43, which is less than the RMSE for the test data, but more than the training data. Approximately 40% of the validation dataset falls within the 95% confidence interval, which suggests the model does not fully account for uncertainty in the market. 
+
+The graph of residuals shows some apparent outliers on the high side, where the model is underpredicting the actual sale price for a number of homes. Given the goal of identifying undervalued homes, the risk aversion is on overestimating the value of homes, making this error acceptable, in my view.
 
 ```{r model_validate}
 sqrt(mean(ames_validation$price - exp(predict(model.proposed, ames_validation))))
+ames_validation <- cbind(ames_validation, predict(model.proposed, ames_validation, interval="confidence"))
+ames_validation$fit <- exp(ames_validation$fit)
+ames_validation$lwr <- exp(ames_validation$lwr)
+ames_validation$upr <- exp(ames_validation$upr)
+ames_validation$confidence <- FALSE
+ames_validation$confidence[ames_validation$price <= ames_validation$upr & ames_validation$price >= ames_validation$lwr] <- TRUE
+length(which(ames_validation$confidence==TRUE)) / length(ames_validation$confidence)
+plot(ames_validation$price - ames_validation$fit)
+ames_validation$resids <- ames_validation$price - ames_validation$fit
+ames_validation <- ames_validation[,!(names(ames_validation) %in% c("(Intercept)", "lwr", "upr", "Heating.QC"))]
 ```
+
+Several townhomes were underestimated by the model, which suggests some features to capture the value of townhomes would benefit future iterations of the model.
 
 * * *
 
@@ -565,6 +557,6 @@ Provide a brief summary of your results, and a brief discussion of what you have
 
 * * *
 
-NOTE: Write your written response to part 5 here. Delete this note before you submit your work.
+The model does fairly well, but struggles with predicting the highest value properties. The validation RMSE was 40.38, and roughly 38% of the true home prices fell within the 95% confidence interval. The model explains roughly 93% of the difference in home price. Overall condition, neighborhood, and home and lot area are significant predictors of home price. Surprisingly, the presence of a pool is not a signficiant predictor of home value.
 
 * * *
